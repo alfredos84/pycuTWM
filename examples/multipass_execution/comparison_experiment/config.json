@@ -1,0 +1,99 @@
+{
+  "simulation": {
+    "name": "Simulation_example",
+    "output_directory": "./results/example_twm",
+    "description": "Simulation example"
+  },
+  "save_mode":{
+    "save_fields_XY_times_slides": true,
+    "save_full_field_inside_crystal":false,
+    "save_timedomain_fields": false,
+    "save_pump": true,
+    "save_in_pump": false,
+    "save_signal": true,
+    "save_idler": false,
+    "save_time_and_freq_vectors": false,
+    "time_performance_filename": "timings_grid_GPU_A100.txt"
+  },  
+  "grid": {
+    "grid_points": {
+      "NX": 64,
+      "NY": 64,
+      "NZ": 1000,
+      "NT": 1,
+      "description": "Grid size"
+    },
+    "kernel_dim": {
+      "BLKT": 16,
+      "BLKX": 16,
+      "BLKY": 16
+    }    
+  },
+  "crystal": {
+    "type": "MgO:PPLN",
+    "dimensions": {
+      "LX": 500.0,
+      "LY": 500.0,
+      "Lcr": 20000.0,
+      "units": "micrometers"
+    },
+    "properties_pp": {
+      "temperature": 27.0,
+      "temperature_units": "Celsius",
+      "grating_period": 6.99,
+      "grating_period_units": "micrometers"
+    },
+    "properties_birref": {
+      "polarization_p": "e",
+      "polarization_s": "e",
+      "polarization_i": "o"
+    },    
+    "wavelengths": {
+      "pump": 1.064,
+      "signal": 0.532,
+      "idler": 0.532,
+      "units": "micrometers",
+      "dk": 0.000032,
+      "units_dk": "micrometers-¹"
+    }
+  },
+  "fields": {
+    "pump": {
+      "pump_power_W": 2.0,
+      "fwhm": 0.20,
+      "fwhm_units": "picoseconds",
+      "waist_um": 26.55,
+      "focal_point_factor": 0.5,
+      "focal_point_expression": "factor * Lcr", 
+      "mode_description":"(1)waveplane-cw; (2)waveplane-pulsed;(3)focused-cw;(4)focused-pulsed",
+      "mode": "focused-cw"
+    },
+    "signal": {
+      "noise_generation": true
+    },
+    "idler": {
+      "noise_generation": true
+    },
+    "degenerate": {
+      "enabled": true,
+      "description": "Use when signal = idler"
+    },
+    "time_freq_vect": {
+      "time_window": 0.8,
+      "description": "Hint: Set as an integer number of FWHM. For instance, 4* or 6*FWHM."
+    }
+  },
+  "mul_pass_scheme": {
+    "multipass": true,
+    "npasses": 5,
+    "add_phase_air": true,
+         "distances_in_air": [
+            9.77,
+            4.47,
+            4.47,
+            4.47,
+            4.47
+        ],
+    "description_distance_in_air": "Distance between mirror and Crystal in cm"
+  }
+}
