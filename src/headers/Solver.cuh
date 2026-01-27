@@ -292,6 +292,9 @@ public:
 		k1i.resize(SIZE); k2i.resize(SIZE); k3i.resize(SIZE); k4i.resize(SIZE);
 		auxp.resize(SIZE); auxs.resize(SIZE); auxi.resize(SIZE);
 
+        // Pointers for dispersion()
+        
+
 		print_line_on_screen();
 		printf("\nInitialize Solver...\n");
 	}
@@ -301,12 +304,10 @@ public:
 
 	// Methods definition	
 	bool check_courant_stability(real_t dz , real_t kpdxdy2);
-	// #ifdef DISPERSION
 	void set_disp_propagators(uint32_t pass = 1);
 	void dispersion();
-	// #endif
 	void set_diff_propagators(uint32_t pass = 1);
-	void diff_in_crystal();
+	void diffraction();
 	void solver_rk4( real_t z, uint32_t pass = 1);
 	void ssmf (uint32_t pass);
 	void set_npasses(uint32_t _npasses);
@@ -320,7 +321,7 @@ public:
 
 // Methods declaration
 
-inline bool Solver::check_courant_stability(real_t dz , real_t kpdxdy)
+bool Solver::check_courant_stability(real_t dz , real_t kpdxdy)
 {
 	bool condition;
 	
@@ -381,71 +382,61 @@ void Solver::set_disp_propagators( uint32_t pass )
 void Solver::dispersion ( )
 {
 	// Parameters for kernels: 3D-tensors converted into 2D
-	// const uint32_t BLKTd   	= 1 << 4;	// block dimensions for kernels 
-	// const uint32_t BLKXYd   = 1 << 4;	// block dimensions for kernels
-	// dim3 block2D(BLKTd, BLKXYd);	
-	// dim3 grid2D((NT+BLKTd-1)/BLKTd, ((NX*NY)+BLKXYd-1)/BLKXYd);
 	dim3 block2D(BLKX, BLKY);
 	dim3 grid2D((NX+BLKX-1)/BLKX, (NY+BLKY-1)/BLKY);
 
-	// Set plan for cuFFT 1D//
-	cufftHandle plan; int NT_cufft = NT;
-	cufftPlanMany( &plan, 1, &NT_cufft, nullptr, 1, NT_cufft, nullptr, 1, NT_cufft, CUFFT_C2C, NX * NY );
-	
 	complex_t *Ap_ptr = thrust::raw_pointer_cast(A->Ap.data());
 	complex_t *As_ptr = thrust::raw_pointer_cast(A->As.data());
 	complex_t *Ai_ptr = thrust::raw_pointer_cast(A->Ai.data());
 	complex_t *eiLz_p_ptr = thrust::raw_pointer_cast(A->eiLz_p.data());
 	complex_t *eiLz_s_ptr = thrust::raw_pointer_cast(A->eiLz_s.data());
 	complex_t *eiLz_i_ptr = thrust::raw_pointer_cast(A->eiLz_i.data());
-	complex_t *Aux_Awp_prop; CHECK(cudaMalloc((void **)&Aux_Awp_prop, nBytes3Dc));
-	complex_t *Aux_Aws_prop; CHECK(cudaMalloc((void **)&Aux_Aws_prop, nBytes3Dc));
-	complex_t *Aux_Awi_prop; CHECK(cudaMalloc((void **)&Aux_Awi_prop, nBytes3Dc));
-
-	// For conversion 3D to 2D
-	complex_t *Aux_Ap; CHECK(cudaMalloc((void **)&Aux_Ap, nBytes3Dc));
-	complex_t *Aux_As; CHECK(cudaMalloc((void **)&Aux_As, nBytes3Dc));
-	complex_t *Aux_Ai; CHECK(cudaMalloc((void **)&Aux_Ai, nBytes3Dc));
-	complex_t *Aux_Awp; CHECK(cudaMalloc((void **)&Aux_Awp, nBytes3Dc));
-	complex_t *Aux_Aws; CHECK(cudaMalloc((void **)&Aux_Aws, nBytes3Dc));
-	complex_t *Aux_Awi; CHECK(cudaMalloc((void **)&Aux_Awi, nBytes3Dc));
+	
+    complex_t *Aux_Ap_ptr = thrust::raw_pointer_cast(A->Aux_Ap.data());
+	complex_t *Aux_As_ptr = thrust::raw_pointer_cast(A->Aux_As.data());
+	complex_t *Aux_Ai_ptr = thrust::raw_pointer_cast(A->Aux_Ai.data());
+    complex_t *Aux_Awp_ptr = thrust::raw_pointer_cast(A->Aux_Awp.data());
+	complex_t *Aux_Aws_ptr = thrust::raw_pointer_cast(A->Aux_Aws.data());
+	complex_t *Aux_Awi_ptr = thrust::raw_pointer_cast(A->Aux_Awi.data());    
+    complex_t *Aux_Awp_prop_ptr = thrust::raw_pointer_cast(A->Aux_Awp_prop.data());
+	complex_t *Aux_Aws_prop_ptr = thrust::raw_pointer_cast(A->Aux_Aws_prop.data());
+	complex_t *Aux_Awi_prop_ptr = thrust::raw_pointer_cast(A->Aux_Awi_prop.data());        
 
 	// Convert into 2D tensor to paralelize FFTs
-	kernelTensor3DTo2D_3Fileds<<<grid2D,block2D>>>( Aux_Ap, Ap_ptr, Aux_As, As_ptr, Aux_Ai, Ai_ptr );
-	CHECK(cudaDeviceSynchronize());
+	kernelTensor3DTo2D_3Fileds<<<grid2D,block2D>>>( Aux_Ap_ptr, Ap_ptr,
+        Aux_As_ptr, As_ptr,
+        Aux_Ai_ptr, Ai_ptr );
 
-	cufftExecC2C(plan, (complex_t *)Aux_Ap, (complex_t *)Aux_Awp, CUFFT_INVERSE);
-	CHECK(cudaDeviceSynchronize());
-	cufftExecC2C(plan, (complex_t *)Aux_As, (complex_t *)Aux_Aws, CUFFT_INVERSE);
-	CHECK(cudaDeviceSynchronize());
-	cufftExecC2C(plan, (complex_t *)Aux_Ai, (complex_t *)Aux_Awi, CUFFT_INVERSE);
-	CHECK(cudaDeviceSynchronize());
+	// CHECK(cudaDeviceSynchronize());
 
-	cuFFT2DScaleAllFieldsDisp<<<grid2D,block2D>>>(	Aux_Awp, Aux_Aws, Aux_Awi);
-	CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDispersion, (complex_t *)Aux_Ap_ptr, (complex_t *)Aux_Awp_ptr, CUFFT_INVERSE);
+	// CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDispersion, (complex_t *)Aux_As_ptr, (complex_t *)Aux_Aws_ptr, CUFFT_INVERSE);
+	// CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDispersion, (complex_t *)Aux_Ai_ptr, (complex_t *)Aux_Awi_ptr, CUFFT_INVERSE);
+	// CHECK(cudaDeviceSynchronize());
 
-	kernelDispersionPropagatorProduct<<<grid2D,block2D>>>(	Aux_Awp_prop, Aux_Awp, eiLz_p_ptr,
-															Aux_Aws_prop, Aux_Aws, eiLz_s_ptr,
-															Aux_Awi_prop, Aux_Awi, eiLz_i_ptr );
-	CHECK(cudaDeviceSynchronize());
+	cuFFT2DScaleAllFieldsDisp<<<grid2D,block2D>>>(	Aux_Awp_ptr, Aux_Aws_ptr, Aux_Awi_ptr);
+	// CHECK(cudaDeviceSynchronize());
 
-	cufftExecC2C(plan, (complex_t *)Aux_Awp_prop, (complex_t *)Aux_Ap, CUFFT_FORWARD);
-	CHECK(cudaDeviceSynchronize());
-	cufftExecC2C(plan, (complex_t *)Aux_Aws_prop, (complex_t *)Aux_As, CUFFT_FORWARD);
-	CHECK(cudaDeviceSynchronize());
-	cufftExecC2C(plan, (complex_t *)Aux_Awi_prop, (complex_t *)Aux_Ai, CUFFT_FORWARD);
-	CHECK(cudaDeviceSynchronize());
+	kernelDispersionPropagatorProduct<<<grid2D,block2D>>>(	Aux_Awp_prop_ptr, Aux_Awp_ptr, eiLz_p_ptr,
+															Aux_Aws_prop_ptr, Aux_Aws_ptr, eiLz_s_ptr,
+															Aux_Awi_prop_ptr, Aux_Awi_ptr, eiLz_i_ptr );
+	// CHECK(cudaDeviceSynchronize());
+
+	cufftExecC2C(A->planDispersion, (complex_t *)Aux_Awp_prop_ptr, (complex_t *)Aux_Ap_ptr, CUFFT_FORWARD);
+	// CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDispersion, (complex_t *)Aux_Aws_prop_ptr, (complex_t *)Aux_As_ptr, CUFFT_FORWARD);
+	// CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDispersion, (complex_t *)Aux_Awi_prop_ptr, (complex_t *)Aux_Ai_ptr, CUFFT_FORWARD);
+	// CHECK(cudaDeviceSynchronize());
 
 	// Convert into 3D tensor
-	kernelTensor2DTo3D_3Fileds<<<grid2D,block2D>>>( Ap_ptr, Aux_Ap, As_ptr, Aux_As, Ai_ptr, Aux_Ai );
-	CHECK(cudaDeviceSynchronize());
+	kernelTensor2DTo3D_3Fileds<<<grid2D,block2D>>>( Ap_ptr, Aux_Ap_ptr,
+        As_ptr, Aux_As_ptr,
+        Ai_ptr, Aux_Ai_ptr );
+	// CHECK(cudaDeviceSynchronize());
 	
-	CHECK(cudaFree(Aux_Ap)); CHECK(cudaFree(Aux_Awp)); CHECK(cudaFree(Aux_Awp_prop));
-	CHECK(cudaFree(Aux_As)); CHECK(cudaFree(Aux_Aws)); CHECK(cudaFree(Aux_Aws_prop));
-	CHECK(cudaFree(Aux_Ai)); CHECK(cudaFree(Aux_Awi)); CHECK(cudaFree(Aux_Awi_prop));
-	
-	cufftDestroy(plan);
-		
 	return ;
 }
 
@@ -476,66 +467,52 @@ void Solver::set_diff_propagators(uint32_t pass )
 
 
 // Applies the diffraction term to the electric fields
-void Solver::diff_in_crystal ()
+void Solver::diffraction ()
 {	
 	// Parameters for kernels 2D
 	dim3 block2D(BLKX, BLKY);	dim3 grid2D((NX+BLKX-1)/BLKX, (NY+BLKY-1)/BLKY);
-	
-	// Set plan for cuFFT 2D//
-	cufftHandle plan2D; 
-	int batch = NT;	int rank = 2;
-	int nRows = NY;	int nCols = NX; int n[2] = {NY, NX};
-	int idist = NX * NY; int odist = NX * NY;
-	int inembed[] = {NY , NX}; 	int onembed[] = {NY, NX};
-	int istride = 1; int ostride = 1;
 
-	cufftPlanMany(&plan2D,  rank, n, inembed, istride, idist, onembed, ostride, odist, CUFFT_C2C, batch);
-	
-	complex_t *AuxQp; CHECK(cudaMalloc((void **)&AuxQp, nBytes3Dc));
-	complex_t *Ap_ptr = thrust::raw_pointer_cast(A->Ap.data());
+	complex_t *AuxQp_ptr = thrust::raw_pointer_cast(A->AuxQp.data());
+    complex_t *Ap_ptr = thrust::raw_pointer_cast(A->Ap.data());
 	complex_t *AQp_ptr = thrust::raw_pointer_cast(A->AQp.data());
 	complex_t *eiQz_p_ptr = thrust::raw_pointer_cast(A->eiQz_p.data());
 
-	complex_t *AuxQs; CHECK(cudaMalloc((void **)&AuxQs, nBytes3Dc));
+	complex_t *AuxQs_ptr = thrust::raw_pointer_cast(A->AuxQs.data());
 	complex_t *As_ptr = thrust::raw_pointer_cast(A->As.data());
 	complex_t *AQs_ptr = thrust::raw_pointer_cast(A->AQs.data());
 	complex_t *eiQz_s_ptr = thrust::raw_pointer_cast(A->eiQz_s.data());
 
-	complex_t *AuxQi; CHECK(cudaMalloc((void **)&AuxQi, nBytes3Dc));
+	complex_t *AuxQi_ptr = thrust::raw_pointer_cast(A->AuxQi.data());
 	complex_t *Ai_ptr = thrust::raw_pointer_cast(A->Ai.data());
 	complex_t *AQi_ptr = thrust::raw_pointer_cast(A->AQi.data());
 	complex_t *eiQz_i_ptr = thrust::raw_pointer_cast(A->eiQz_i.data());
 
 
-	cufftExecC2C(plan2D, (complex_t *)Ap_ptr, (complex_t *)AQp_ptr, CUFFT_FORWARD);
-	CHECK(cudaDeviceSynchronize());
-	cufftExecC2C(plan2D, (complex_t *)As_ptr, (complex_t *)AQs_ptr, CUFFT_FORWARD);
-	CHECK(cudaDeviceSynchronize());
-	cufftExecC2C(plan2D, (complex_t *)Ai_ptr, (complex_t *)AQi_ptr, CUFFT_FORWARD);
-	CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDiffraction, (complex_t *)Ap_ptr, (complex_t *)AQp_ptr, CUFFT_FORWARD);
+	// CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDiffraction, (complex_t *)As_ptr, (complex_t *)AQs_ptr, CUFFT_FORWARD);
+	// CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDiffraction, (complex_t *)Ai_ptr, (complex_t *)AQi_ptr, CUFFT_FORWARD);
+	// CHECK(cudaDeviceSynchronize());
 	
-	kernelDiffractionPropagatorProduct<<<grid2D, block2D>>> (	AuxQp, eiQz_p_ptr, AQp_ptr,
-																AuxQs, eiQz_s_ptr, AQs_ptr,	
-																AuxQi, eiQz_i_ptr, AQi_ptr	);
-	CHECK(cudaDeviceSynchronize());
+	kernelDiffractionPropagatorProduct<<<grid2D, block2D>>> (	AuxQp_ptr, eiQz_p_ptr, AQp_ptr,
+																AuxQs_ptr, eiQz_s_ptr, AQs_ptr,	
+																AuxQi_ptr, eiQz_i_ptr, AQi_ptr	);
+	// CHECK(cudaDeviceSynchronize());
 	
-	CHECK(cudaMemcpy(AQp_ptr, AuxQp, nBytes3Dc, cudaMemcpyDeviceToDevice));	
-	CHECK(cudaMemcpy(AQs_ptr, AuxQs, nBytes3Dc, cudaMemcpyDeviceToDevice));
-	CHECK(cudaMemcpy(AQi_ptr, AuxQi, nBytes3Dc, cudaMemcpyDeviceToDevice));
+	CHECK(cudaMemcpy(AQp_ptr, AuxQp_ptr, nBytes3Dc, cudaMemcpyDeviceToDevice));	
+	CHECK(cudaMemcpy(AQs_ptr, AuxQs_ptr, nBytes3Dc, cudaMemcpyDeviceToDevice));
+	CHECK(cudaMemcpy(AQi_ptr, AuxQi_ptr, nBytes3Dc, cudaMemcpyDeviceToDevice));
 	
-	cufftExecC2C(plan2D, (complex_t *)AQp_ptr, (complex_t *)Ap_ptr, CUFFT_INVERSE);
-	CHECK(cudaDeviceSynchronize());
-	cufftExecC2C(plan2D, (complex_t *)AQs_ptr, (complex_t *)As_ptr, CUFFT_INVERSE);
-	CHECK(cudaDeviceSynchronize());
-	cufftExecC2C(plan2D, (complex_t *)AQi_ptr, (complex_t *)Ai_ptr, CUFFT_INVERSE);
-	CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDiffraction, (complex_t *)AQp_ptr, (complex_t *)Ap_ptr, CUFFT_INVERSE);
+	// CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDiffraction, (complex_t *)AQs_ptr, (complex_t *)As_ptr, CUFFT_INVERSE);
+	// CHECK(cudaDeviceSynchronize());
+	cufftExecC2C(A->planDiffraction, (complex_t *)AQi_ptr, (complex_t *)Ai_ptr, CUFFT_INVERSE);
+	// CHECK(cudaDeviceSynchronize());
 
 	cuFFT2DScaleAllFieldsDiff<<<grid2D, block2D>>>(Ap_ptr, As_ptr, Ai_ptr);
-	CHECK(cudaDeviceSynchronize());		
-	
-	CHECK(cudaFree(AuxQp)); CHECK(cudaFree(AuxQs)); CHECK(cudaFree(AuxQi));
-	
-	cufftDestroy(plan2D);
+	// CHECK(cudaDeviceSynchronize());		
 		
 	return ;
 }
@@ -580,25 +557,25 @@ void Solver::solver_rk4( real_t z, uint32_t pass)
 
 	//k1 = dAdz(kappas,dk,z,A)
 	dAdz<<<grid2D,block2D>>>( k1p_ptr, k1s_ptr, k1i_ptr, Ap_ptr, As_ptr, Ai_ptr, kp, ks, ki, dk, z, pass );
-	CHECK(cudaDeviceSynchronize()); 
+	// CHECK(cudaDeviceSynchronize()); 
 
 	//k2 = dAdz(kappas,dk,z+dz/2,A+k1/2) -> aux = A+k1/2
 	kernelLinealCombination<<<grid2D,block2D>>>( auxp_ptr, auxs_ptr, auxi_ptr, Ap_ptr, As_ptr, Ai_ptr, k1p_ptr, k1s_ptr, k1i_ptr, 0.5f );
-	CHECK(cudaDeviceSynchronize());   
+	// CHECK(cudaDeviceSynchronize());   
 	dAdz<<<grid2D,block2D>>>( k2p_ptr, k2s_ptr, k2i_ptr, auxp_ptr, auxs_ptr, auxi_ptr, kp, ks, ki, dk, z+dz/4.0f, pass );
-	CHECK(cudaDeviceSynchronize());
+	// CHECK(cudaDeviceSynchronize());
 
 	// k3 = dAdz(kappas,dk,z+dz/2,A+k2/2)
 	kernelLinealCombination<<<grid2D,block2D>>>( auxp_ptr, auxs_ptr, auxi_ptr, Ap_ptr, As_ptr, Ai_ptr, k2p_ptr, k2s_ptr, k2i_ptr, 0.5f );
-	CHECK(cudaDeviceSynchronize());   
+	// CHECK(cudaDeviceSynchronize());   
 	dAdz<<<grid2D,block2D>>>( k3p_ptr, k3s_ptr, k3i_ptr, auxp_ptr, auxs_ptr, auxi_ptr, kp, ks, ki, dk, z+dz/4.0f, pass );
-	CHECK(cudaDeviceSynchronize());
+	// CHECK(cudaDeviceSynchronize());
 
 	// k4 = dAdz(kappas,dk,z+dz,A+k3)
 	kernelLinealCombination<<<grid2D,block2D>>>( auxp_ptr, auxs_ptr, auxi_ptr, Ap_ptr, As_ptr, Ai_ptr, k3p_ptr, k3s_ptr, k3i_ptr, 1.0f );
-	CHECK(cudaDeviceSynchronize());   
+	// CHECK(cudaDeviceSynchronize());   
 	dAdz<<<grid2D,block2D>>>( k4p_ptr, k4s_ptr, k4i_ptr, auxp_ptr, auxs_ptr, auxi_ptr, kp, ks, ki, dk, z+dz/2.0f, pass );
-	CHECK(cudaDeviceSynchronize());
+	// CHECK(cudaDeviceSynchronize());
 
 	// A = A + (k1 + 2*k2 + 2*k3 + k4)/6
 	rk4<<<grid2D,block2D>>>(Ap_ptr, As_ptr, Ai_ptr, 
@@ -607,7 +584,7 @@ void Solver::solver_rk4( real_t z, uint32_t pass)
 							k3p_ptr, k3s_ptr, k3i_ptr,
 							k4p_ptr, k4s_ptr, k4i_ptr, 
 							dz/2.0f );
-	CHECK(cudaDeviceSynchronize());
+	// CHECK(cudaDeviceSynchronize());
 
 	return ;
 	
@@ -636,7 +613,7 @@ void Solver::ssmf (uint32_t pass )
         	if (percent == 100) std::cout << std::endl;
     	}
 		#endif
-		diff_in_crystal(); // Diffraction in dz
+		diffraction(); // Diffraction in dz
 		solver_rk4(z, pass); // RK4 in dz/2
 		z+=(Cr->dz);
 		#ifndef DISPERSION
@@ -672,22 +649,26 @@ void Solver::run_single_pass()
 		}
 
 		double iStart = seconds();	// Timing code
+        A->set_plan_diffraction();
+        A->set_plan_dispersion();
 		A->Ap = A->Api;
 		#ifdef DISPERSION
 		set_disp_propagators();
 		#endif
 		set_diff_propagators();
 		ssmf(1);
-
+        A->destroy_cufft_plans();
 		double iElaps = seconds() - iStart;	// finish timing
 		timing_code( iElaps); // print time
 		log_simulation_timing(config["save_mode"]["time_performance_filename"].get<std::string>(), iElaps);
+       
 	}
 	
 	else {
 		std::cout << "        ---> Courant convergence criteria: failed." << std::endl;
 		std::cout << "        ---> Please change step sizes. Courant factor = " << (0.2f*A->kp*Cr->dx*Cr->dy)/Cr->dz << " < 1" << std::endl;
 	}
+
 	return ;
 }
 
@@ -711,6 +692,8 @@ void Solver::run_multipass()
 		}
 	
 		double iStart = seconds();	// Timing code
+        A->set_plan_diffraction();
+        A->set_plan_dispersion();
 		A->Ap = A->Api;
 		for (int pass = 1; pass <= this->npasses; pass++){
 			std::cout << "        ---> Computing pass #" << pass << std::endl;	
@@ -724,7 +707,7 @@ void Solver::run_multipass()
 				std::cout << "        ---> Phase added to fields." << std::endl;
 			}
 		}
-		
+		A->destroy_cufft_plans();
 		double iElaps = seconds() - iStart;	// finish timing
 		timing_code( iElaps); // print time
 		log_simulation_timing(config["save_mode"]["time_performance_filename"].get<std::string>(), iElaps);

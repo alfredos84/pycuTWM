@@ -1,2 +1,0 @@
-# NX   NY   NZ   NT   time_seconds
-    64     64   1000    256 12.525900

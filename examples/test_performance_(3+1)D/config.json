@@ -17,8 +17,8 @@
     },
     "grid": {
         "grid_points": {
-            "NX": 128,
-            "NY": 128,
+            "NX": 64,
+            "NY": 64,
             "NZ": 1000,
             "NT": 256,
             "description": "Grid size"

@@ -202,6 +202,14 @@ public:
 	cVecd_t eiLz_p, eiLz_s, eiLz_i;
     rVecd_t t, F, w;
 
+    // Diffraction propagators (auxiliary)
+    cVecd_t AuxQp, AuxQs, AuxQi;
+    // Dispersion propagators (auxiliary)
+    cVecd_t Aux_Ap, Aux_As, Aux_Ai;
+    cVecd_t Aux_Awp, Aux_Aws, Aux_Awi;
+    cVecd_t Aux_Awp_prop, Aux_Aws_prop, Aux_Awi_prop;
+
+
 	real_t lp, ls, li, waist, Power;
 	real_t np, ns, ni;
 	real_t vp, vs, vi;
@@ -212,6 +220,9 @@ public:
 	real_t dx, dy, dz;
 	real_t dk, dkp;	// mismatch and group-velocity mismatch
 
+    // cuFFT plans for diffraction and dispersion
+    cufftHandle planDiffraction, planDispersion; 
+    
     // Constructor
     EFields(real_t _lp, real_t _ls, real_t _li, real_t _Power, real_t _waist, Crystal *Cr) :
 			lp(_lp), ls(_ls), li(_li), Power(_Power), waist(_waist)
@@ -221,11 +232,15 @@ public:
 		this->Ap.resize(SIZE); this->As.resize(SIZE); this->Ai.resize(SIZE);
 		this->Awp.resize(SIZE); this->Aws.resize(SIZE); this->Awi.resize(SIZE);
 		this->AQp.resize(SIZE); this->AQs.resize(SIZE); this->AQi.resize(SIZE);
+        this->AuxQp.resize(SIZE); this->AuxQs.resize(SIZE); this->AuxQi.resize(SIZE);
+        this->Aux_Ap.resize(SIZE); this->Aux_As.resize(SIZE); this->Aux_Ai.resize(SIZE);
+        this->Aux_Awp.resize(SIZE); this->Aux_Aws.resize(SIZE); this->Aux_Awi.resize(SIZE);
+        this->Aux_Awp_prop.resize(SIZE); this->Aux_Aws_prop.resize(SIZE); this->Aux_Awi_prop.resize(SIZE);
 		this->eiQz_p.resize(NX*NY); this->eiQz_s.resize(NX*NY); this->eiQz_i.resize(NX*NY);
 		this->eiLz_p.resize(NT); this->eiLz_s.resize(NT); this->eiLz_i.resize(NT);
 		
 		this->t.resize(NT); this->F.resize(NT); this->w.resize(NT);
-		
+
 		print_line_on_screen();
 		printf("\nInitialize Electric fields.\n");
 		np  = Cr->np; ns = Cr->ns; ni = Cr->ni;
@@ -253,6 +268,9 @@ public:
 	void fftShift2D ( cVecd_t& propagator );
 	real_t ref_index_air(real_t lambda_um);
 	void add_phase_in_air(real_t lp, real_t ls, real_t distance_cm);
+    void set_plan_diffraction();
+    void set_plan_dispersion();
+    void destroy_cufft_plans();
 };
 
 
@@ -278,14 +296,14 @@ void EFields::set_pump_field( real_t Power, real_t FWHM, real_t waist, real_t fo
 
 	if (mode.compare(mode1) == 0){
 		setWavePlaneCW<<<grid2D,block2D>>>( Ap_ptr, Ap0, waist, 0.5*NX, 0.5*NY, this->dx, this->dy );
-		CHECK(cudaDeviceSynchronize()); 
+		// CHECK(cudaDeviceSynchronize()); 
 		std::cout << "        ---> Pump field mode: " + mode << std::endl;
 		std::cout << "        ---> Pump Power: " << Power << " W" << std::endl;
 		std::cout << "        ---> Beam waist: " << waist << " \u03BCm\n" << std::endl;
 	}
 	else if (mode.compare(mode2) == 0){
 		setWavePlanePulsed<<<grid2D,block2D>>>( Ap_ptr, t_ptr, Ap0, waist, tau, 0.5*NX, 0.5*NY, this->dx, this->dy );
-		CHECK(cudaDeviceSynchronize()); 
+		// CHECK(cudaDeviceSynchronize()); 
 		std::cout << "        ---> Pump field mode: " + mode << std::endl;
 		std::cout << "        ---> Pump Power: " << Power << " W" << std::endl;
 		std::cout << "        ---> Beam waist: " << waist << " \u03BCm" << std::endl;
@@ -293,7 +311,7 @@ void EFields::set_pump_field( real_t Power, real_t FWHM, real_t waist, real_t fo
 	}
 	else if (mode.compare(mode3) == 0){
 		setFocusedCW<<<grid2D,block2D>>>( Ap_ptr, Ap0, MX, waist, 0.5*NX, 0.5*NY, this->dx, this->dy );
-		CHECK(cudaDeviceSynchronize());
+		// CHECK(cudaDeviceSynchronize());
 		std::cout << "        ---> Pump field mode: " + mode << std::endl;
 		std::cout << "        ---> Setting Pump e-field with \u03BE = " << eta << std::endl;
 		std::cout << "        ---> Pump Power: " << Power << " W" << std::endl;
@@ -302,7 +320,7 @@ void EFields::set_pump_field( real_t Power, real_t FWHM, real_t waist, real_t fo
 	}
 	else if (mode.compare(mode4) == 0){
 		setFocusedPulsed<<<grid2D,block2D>>>( Ap_ptr, t_ptr, Ap0, MX, waist, tau, 0.5*NX, 0.5*NY, this->dx, this->dy );
-		CHECK(cudaDeviceSynchronize()); 
+		// CHECK(cudaDeviceSynchronize()); 
 		std::cout << "        ---> Pump field mode: " + mode << std::endl;
 		std::cout << "        ---> Setting Pump e-field with \u03BE = " << eta << std::endl;
 		std::cout << "        ---> Pump Power: " << Power << " W" << std::endl;
@@ -421,4 +439,33 @@ void EFields::add_phase_in_air(real_t lp, real_t ls, real_t distance_cm)
 }
 
 
+void EFields::set_plan_diffraction()
+{
+    // This function can be used to set up cuFFT plans needed for diffraction
+	int batch = NT;	int rank = 2;
+	int nRows = NY;	int nCols = NX; int n[2] = {NY, NX};
+	int idist = NX * NY; int odist = NX * NY;
+	int inembed[] = {NY , NX}; 	int onembed[] = {NY, NX};
+	int istride = 1; int ostride = 1;
+
+	cufftPlanMany(&this->planDiffraction, rank, n, inembed, istride,
+        idist, onembed, ostride, odist, CUFFT_C2C, batch);
+}
+
+
+void EFields::set_plan_dispersion()
+{
+    // This function can be used to set up cuFFT plans needed for dispersion
+	int NT_cufft = NT;
+	cufftPlanMany(&this->planDispersion, 1, &NT_cufft, nullptr, 1, NT_cufft,
+        nullptr, 1, NT_cufft, CUFFT_C2C, NX * NY );
+}
+
+
+void EFields::destroy_cufft_plans()
+{
+    // This function destroys cuFFT plans
+    cufftDestroy(this->planDiffraction);
+    cufftDestroy(this->planDispersion);
+}
 #endif // -> #ifdef _EFIELDSCUH

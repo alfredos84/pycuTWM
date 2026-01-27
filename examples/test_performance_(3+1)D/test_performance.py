@@ -34,9 +34,9 @@ with open(json_path, 'r') as f:
 # nx_list = [64, 128]
 # nz_list = [100000, 1000000]
 # nt_list = [256, 512, 1024, 2048, 4096]
-nx_list = [64, 128]
+nx_list = [64]
 nz_list = [1000]
-nt_list = [128,256]
+nt_list = [256]
 
 for nz in nz_list:
     config["grid"]["grid_points"]["NZ"] = nz
