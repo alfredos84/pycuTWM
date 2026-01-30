@@ -124,9 +124,6 @@ int main(int argc, char *argv[]){
 	if (multi_pass and (npasses > 1) ){
 		solv1->set_npasses(npasses);
 		solv1->set_mirror_distances(mirror_distances);
-		// std::cout << "        ---> Set mirror distances:" << std::endl;
-		// for (int m = 1; m < npasses; m++)
-		// 	std::cout << "        ---> Mirror #" << m << " at distance " << mirror_distances[m-1] << std::endl;
 
 		if (add_phase_air){solv1->set_air_phase();}
 
@@ -150,10 +147,6 @@ int main(int argc, char *argv[]){
 	save_output_slices_XY (A.get(), config);
 	save_time_and_frequency_vectors_h5(A.get(), config);
 
-	// /////////////////////////////////////////////////////////////////////////////////
-	// // 5. Delete object instances
-	
-	///////////////////////////////////////////////////////////////////////////////////
 	
 	return 0;
 	
