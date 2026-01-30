@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <vector>
+#include <memory>
 #include <numeric>
 #include <tuple>
 #include <unordered_set>
@@ -18,6 +19,7 @@
 #include <nlohmann/json.hpp> 
 #include "H5Cpp.h"
 
+// CUDA and Thrust headers
 #include <cuda_runtime.h>
 #include <cufft.h>
 #include <cuda_profiler_api.h>
@@ -31,4 +33,3 @@
 #include <thrust/random.h>
 #include <thrust/functional.h>
 #include <thrust/execution_policy.h>
-

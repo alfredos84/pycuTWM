@@ -4,7 +4,7 @@
 
 #include "headers/Libraries.cuh"		// Required libraries
 #include "headers/PackageLibraries.cuh"	// Required package libraries
-#include <memory>
+
 
 
 int main(int argc, char *argv[]){
@@ -77,7 +77,6 @@ int main(int argc, char *argv[]){
 	
 
 	// b. set electric fields	
-	// real_t alphas = 0.5*( (1-cav1->Rs)+cr1->alpha_crs*cr1->Lcr ), alphai = alphas; 
 	real_t Power = config["fields"]["pump"]["pump_power_W"].get<real_t>();
 	real_t waist = config["fields"]["pump"]["waist_um"].get<real_t>();
 	real_t FWHM = config["fields"]["pump"]["fwhm"].get<real_t>();
