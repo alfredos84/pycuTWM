@@ -4,6 +4,7 @@
 
 #include "headers/Libraries.cuh"		// Required libraries
 #include "headers/PackageLibraries.cuh"	// Required package libraries
+#include <memory>
 
 
 int main(int argc, char *argv[]){
@@ -46,19 +47,19 @@ int main(int argc, char *argv[]){
     
     // Instantiate the correct crystal based on type
 	// Base class for crystals: MgOsPPLT, MgOPPLN, PPLN and ZGP
-    Crystal* cr1 = nullptr;
+    std::unique_ptr<Crystal> cr1;
 	if (crystal_type == "MgO:sPPLT") {
         real_t T = config["crystal"]["properties_pp"]["temperature"].get<real_t>();
         real_t Lambda = config["crystal"]["properties_pp"]["grating_period"].get<real_t>();
-        cr1 = new MgOsPPLT(LX, LY, Lcr, T, Lambda, lp, ls, li);
+        cr1 = std::make_unique<MgOsPPLT>(LX, LY, Lcr, T, Lambda, lp, ls, li);
 	} else if (crystal_type == "PPLN") {
 		real_t T = config["crystal"]["properties_pp"]["temperature"].get<real_t>();
 		real_t Lambda = config["crystal"]["properties_pp"]["grating_period"].get<real_t>();
-		cr1 = new PPLN(LX, LY, Lcr, T, Lambda, lp, ls, li);
+		cr1 = std::make_unique<PPLN>(LX, LY, Lcr, T, Lambda, lp, ls, li);
     } else if (crystal_type == "MgO:PPLN") {
 		real_t T = config["crystal"]["properties_pp"]["temperature"].get<real_t>();
 		real_t Lambda = config["crystal"]["properties_pp"]["grating_period"].get<real_t>();
-		cr1 = new MgOPPLN(LX, LY, Lcr, T, Lambda, lp, ls, li);
+		cr1 = std::make_unique<MgOPPLN>(LX, LY, Lcr, T, Lambda, lp, ls, li);
 	} else if (crystal_type == "ZGP") {
         // Assuming polarizations are passed as an array in JSON
         // Example: "polarizations": ["e", "e", "o"]
@@ -66,7 +67,7 @@ int main(int argc, char *argv[]){
 		auto pol_s = config["crystal"]["properties_birref"]["polarization_s"].get<char>();
 		auto pol_i = config["crystal"]["properties_birref"]["polarization_i"].get<char>();
         std::tuple<char, char, char> pol = std::make_tuple(pol_p, pol_s, pol_i);
-        cr1 = new ZGP(LX, LY, Lcr, pol, lp, ls, li); 
+        cr1 = std::make_unique<ZGP>(LX, LY, Lcr, pol, lp, ls, li); 
     } else {
         std::cerr << "Error: Unsupported crystal type specified in JSON: " << crystal_type << std::endl;
         return ;
@@ -83,7 +84,7 @@ int main(int argc, char *argv[]){
 	real_t focalpoint = (config["fields"]["pump"]["focal_point_factor"].get<real_t>()) * Lcr;
 	
 	
-	EFields * A = new EFields (lp, ls, li, Power, waist, cr1);
+	std::unique_ptr<EFields> A = std::make_unique<EFields>(lp, ls, li, Power, waist, cr1.get());
 	real_t t_window =  config["fields"]["time_freq_vect"]["time_window"].get<real_t>();
 	A->set_time_freq_vectors(t_window);
 	
@@ -112,7 +113,7 @@ int main(int argc, char *argv[]){
 	///////////////////////////////////////////////////////////////////////////////////
 	// 3. run package
 	
-	Solver* solv1 = new Solver(cr1, A, config);
+	std::unique_ptr<Solver> solv1 = std::make_unique<Solver>(cr1.get(), A.get(), config);
 	
 	bool multi_pass = config["mul_pass_scheme"]["multipass"].get<bool>();
 	uint32_t npasses = config["mul_pass_scheme"]["npasses"].get<int>();
@@ -145,16 +146,12 @@ int main(int argc, char *argv[]){
 	///////////////////////////////////////////////////////////////////////////////////
 	// 4. Save output data
 	
-	save_input_pump_slices_XY (A, config);
-	save_output_slices_XY (A, config);
-	save_time_and_frequency_vectors_h5(A, config);
+	save_input_pump_slices_XY (A.get(), config);
+	save_output_slices_XY (A.get(), config);
+	save_time_and_frequency_vectors_h5(A.get(), config);
 
 	// /////////////////////////////////////////////////////////////////////////////////
 	// // 5. Delete object instances
-
-	delete solv1;
-	delete A;
-	delete cr1;
 	
 	///////////////////////////////////////////////////////////////////////////////////
 	

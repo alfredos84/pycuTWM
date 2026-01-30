@@ -3,7 +3,7 @@
 
 const uint32_t NX = 64;
 const uint32_t NY = 64;
-const uint32_t NZ = 2500;
+const uint32_t NZ = 1000;
 #ifdef DISPERSION
 const uint32_t NT = 1;
 #else
