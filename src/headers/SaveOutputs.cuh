@@ -101,7 +101,6 @@ void save_matrix_complex_h5_time(const cVech_t& field, const std::string& filena
 }
 
 
-
 void save_output_slices_XY(EFields *A, json config) {
     bool save_XY = config["save_mode"]["save_fields_XY_times_slides"].get<bool>();
     bool save_p  = config["save_mode"]["save_pump"].get<bool>();
@@ -170,5 +169,20 @@ void save_time_and_frequency_vectors_h5(EFields *A, json config)
     }
 }
 
+
+// Save all outputs
+void save_all_outputs(EFields *A, json config)
+{
+    // Save input pump field
+    save_input_pump_slices_XY(A, config);
+
+    // Save output fields
+    save_output_slices_XY(A, config);
+
+    // Save time and frequency vectors
+    save_time_and_frequency_vectors_h5(A, config);
+
+    return;
+}
 
 #endif // -> #ifdef _SAVEOUTPUTS

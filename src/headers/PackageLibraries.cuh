@@ -8,3 +8,4 @@
 #include "EFields.cuh"
 #include "SaveOutputs.cuh"
 #include "Solver.cuh"
+#include "ConfigObjects.cuh"
