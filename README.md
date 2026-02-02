@@ -37,8 +37,9 @@ $$  \hat{\mathcal{D}}^{(xy)}_{\lambda} = - \frac{i}{2k_{\lambda}}\left(\frac{\pa
 - An **NVIDIA GPU** with supported drivers already installed. Check with `nvidia-smi`: it should list your GPU.
 - At least 8 GB RAM recommended
 - The package was tested on Linux-Ubuntu
-- GCC
+- `gcc`,`g++`, and `nvcc` compilers
 - Libraries `JSON` and H5 for `C++`
+- The package requires at least `C++14`
 
 ## 1. Using the nlohmann/json C++ Library with Any C++/CUDA Project
 
