@@ -8,7 +8,7 @@
 
 
 int main(int argc, char *argv[]){
-
+	welcome();
 	///////////////////////////////////////////////////////////////////////////////////
 	// 1. Read config.json data set that contains all the required parameters 
 	
