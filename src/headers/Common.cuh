@@ -152,6 +152,26 @@ void is_gpu_available()
     return ;
 }
 
+inline void welcome()
+{
+    std::cout << R"(
+
+*******************************************
+*                                         *
+*  TTTTTTTTT   W       W   M       M      *
+*      T       W       W   MM     MM      *
+*      T       W   W   W   M M   M M      *
+*      T       W  W W  W   M  M M  M      *
+*      T       W W   W W   M   M   M      *
+*      T       WW     WW   M       M      *
+*      T       W       W   M       M      *
+*                                         *
+*       (3+1)D   S I M U L A T O R        *
+*                                         *
+*******************************************
+
+)" << std::endl;
+}
 
 inline void print_grid()
 {   // Print set grid on screen
